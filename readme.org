@@ -1,0 +1,25 @@
+#+TITLE: Dashboard for Decision Curve Analysis based on Vickers et al. 2008 
+#+AUTHOR: Chong Hoon Kim
+#+EMAIL: chong.kim@ucdenver.edu
+#+DATE: 2/21/2018
+#+HTML_HEAD: <style>#content {width: 850px; margin-left: 50px; margin-bottom: 40px; padding: 20px; background: #fff;}
+#+HTML_HEAD: body {background: #eee;}
+#+HTML_HEAD: #postamble {margin-left: 50px; background: #eee;}</style>style>
+#+PROPERTY: header-args:R :session *R* :tangle yes :comments no :eval no-export
+
+# TODO About this document.
+# - disclaimer: Many questions will remain open but at least this tutorial will put you in the position to ask those questions.
+# - feel free to use issue tracker and PRs are welcome
+# - reference to tangled code
+
+
+
+* README
+
+This repository contains the codes necessary to produce an interactive shiny dash board that can be found at https://pharmacoecon.shinyapps.io/DecisionCurveApp/. The original [[http://journals.sagepub.com/doi/abs/10.1177/0272989x06295361][Vickers et al]]'s code is embedded in the dashboard. The original purpose of the document was to serve as the analysis toolkit for determining the clinical utility of prediction models. The dashboard entails:
+
+0. Before embarking on the use of the dashboard, please have the necessary data files (*.csv or *.txt) that can be used as the input for the analysis. 
+1. Allowing user to input datasets (as csv) and provide summary statistics and simple data visualization before conducting predictive modeling.
+2. Users can specify which models (e.g. logistic regression or decision tree) to use.
+3. Graphical display of the Receiver Operating Characteristic (ROC) curve and Net Benefit curve.
+4. Parameters of the parametric distributions and fit statistics can be obtained..
