@@ -7,17 +7,32 @@
 #    http://shiny.rstudio.com/
 #
 
+# shiny packages
 library(shiny)
 library(shinydashboard)
+
+# for summary statistics
 library(DT)
 library("psych")
 library(dplyr)
-library(lavaan)
-library("semPlot")
 library(formattable)
-library(plspm)
+
+# prediction models
+library(rpart)
+library(randomForest)
+library(e1071)
+library(xgboost)
+
+# plotting
 library(ggfortify)
-library(pander)
+library(plotly)
+library(pROC)
+library(rpart.plot)
+library(caret)
+
+# fit stats
+library(stargazer)
+
 # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
   
@@ -46,10 +61,22 @@ shinyServer(function(input, output) {
   
   #This previews the CSV data file
   output$filetable <- renderDataTable({
+    validate(
+      need(redfile(),
+           "Please insert a .csv file")
+    )
+    
     redfile()
   })
   
   output$sum <- renderDataTable({
+    
+    validate(
+      need(redfile(), "Sorry, there is no data for your requested summary table. 
+           Please inser the data."
+      )
+      )
+    
     datatable(describe(redfile())) %>%
       formatRound(., columns = c(colnames(describe(redfile()))), digits = 2)
   })
@@ -59,6 +86,10 @@ shinyServer(function(input, output) {
     sessionInfo()
   })
   
+  output$varnames <- renderPrint({
+    names(filedata())
+  })
+  
   
   # correlation
   
@@ -66,9 +97,6 @@ shinyServer(function(input, output) {
     round(cor(cbind(redfile()), use = "complete"),3)
   })
   
-  output$correl <- renderPrint({
-    correl()
-  })
   
   
   makecorPlot <- function(){
@@ -80,231 +108,133 @@ shinyServer(function(input, output) {
   })
   
   
-  # EFA, CFA, PATH, GCM Analysis
+  # Predictive Modeling
   
-  get.text <- reactive({
-    input$model
+  output$outcomevariable <- renderUI({
+    selectInput('outvar', 'Select the Outcome Variable (only one)', names(filedata()) , multiple = FALSE)
   })
   
+  output$independentvariable <- renderUI({
+    selectInput('indvar', 'Select independent variables (may be more than one)', names(filedata()) , multiple = TRUE)
+  })
   
-  output$Variablesefa <- renderUI({
+  output$Variablespm <- renderUI({
     selectInput('vars2', 'Variables', names(filedata()) , multiple = TRUE)
-  })
-  
-  output$Variablepcagroup <- renderUI({
-    selectInput('vars3', 'Grouping Variable', names(redfileefa()) , multiple = FALSE)
-  })
-  
-  
-  # EFA data selection of the indicators for factor analysis
-  redfileefa <- reactive({
-    select(filedata(), input$vars2)
   })
   
   
   est <- reactive({
-    
+    # set input data
     dat <- filedata()
+    # initialize list
+    fit_stats <- list()
     
-    model <- get.text()
+    fit_glm <- glm(formula = as.formula(paste0(input$outvar, " ~ ", paste0(c(input$indvar), collapse = " + "))), data=dat, family =binomial("logit"))
+    dat$pred_glm <- fit_glm$fitted.values
+    fit_stats$fit_glm <- fit_glm
+     
+    fit_dt <- rpart(as.formula(paste0(input$outvar, " ~ ", paste0(c(input$indvar), collapse = " + "))), data=dat)
+    dat$pred_dt <- predict(fit_dt, dat)
+    fit_stats$fit_dt <- fit_dt
     
-    if(input$anal == "efa" & input$efalysisopt == "ML"){
-      fit <- factanal(~., data=redfileefa(), factors = input$numfactor, rotation = input$rotfactor)
-    }
+    fit_rf <- randomForest(as.formula(paste0(input$outvar, " ~ ", paste0(c(input$indvar), collapse = " + "))), data=dat, ntree = input$ntree, mtry = input$mtry)
+    dat$pred_rf <- predict(fit_rf, dat) # later will need to revise this section
+    fit_stats$fit_rf <- fit_rf
     
-    if(input$anal == "efa" & input$efalysisopt == "pa"){
-      fit <- fa.parallel(x = redfileefa(), fa=input$pafaoption, fm = input$pafmoption)
-    }
+    fit_svm <- svm(as.formula(paste0(input$outvar, " ~ ", paste0(c(input$indvar), collapse = " + "))),  data=dat, kernel = input$svmkernel, gamma = input$gamma)
+    dat$pred_svm <- predict(fit_svm, dat)
+    fit_stats$fit_svm <- fit_svm
     
-    if(input$anal == "efa" & input$efalysisopt == "paf"){
-      fit <- fa(redfileefa(), nfactors = input$numfactor, rotate = input$rotfactor, residuals = TRUE, SMC = TRUE, fm = input$pafmoption)
-    }
-    
-    if(input$anal == "efa" & input$efalysisopt == "pca"){
-      fit <- princomp(redfileefa())
-    }
-    
-    if(input$anal == "cfa"){
-      fit <- cfa(model, data=dat, estimator = input$estimatoroptions, se = input$seoptions,
-                 bootstrap = input$bootstrapoptions, orthogonal = input$orthogonaloptions)
-    }
-    if(input$anal == "sem"){
-      fit <- sem(model, data=dat, estimator = input$estimatoroptions, se = input$seoptions,
-                 bootstrap = input$bootstrapoptions, orthogonal = input$orthogonaloptions)
-    }
-    if(input$anal == "growth"){
-      fit <- growth(model, data=dat, estimator = input$estimatoroptions, se = input$seoptions,
-                    bootstrap = input$bootstrapoptions, orthogonal = input$orthogonaloptions)
-    }
-    
-    list(fit = fit)
+    list(dat = dat, fit_stats = fit_stats)
     
   })
   
-  # PLS analysis
-  
-  get.textpls <- reactive({
-    input$plsinner
+  output$preddat <- renderDataTable({
+    
+    dat <- est()$dat
+    sel_dat <- dat[,grepl("^pred_|^pat", colnames(dat))]
+    datatable(sel_dat) %>%
+      formatRound(., columns = c(colnames(sel_dat)), digits = 2)
   })
   
-  output$Variablespls <- renderUI({
-    selectInput('vars1', 'Variables', names(filedata()) , selected = c('PEW1','PEW2','PEW3','PEW4','PUW1','PUW2','PUW3','PUW4','PEUW1','PEUW2','PEUW3','PEA1','PEA2','PEA3','PEA4','PUA1','PUA2','PUA3','PUA4','PEUA1','PEUA2','PEUA3','IU1','IU2','IU3') ,multiple = TRUE)
+  # glm outputs
+  
+  ## glm fit summary
+  output$glm_sum <- renderUI(HTML(stargazer(est()$fit_stats$fit_glm, dep.var.labels = input$outvar, type="html")))
+  
+  ## glm cm plot
+  output$glmcmplot <- renderPlot({
+    fourfoldplot(confusionMatrix(ifelse(est()$dat$pred_glm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$table)
   })
   
-  redfilepls <- reactive({
-    select(filedata(), input$vars1)
+  ### Plotting 
+  
+  #### Decision Tree plots
+  
+  output$dtplot <- renderPlot({
+    rpart.plot(est()$fit_stats$fit_dt)
   })
   
-  plsmod <- reactive({
+  output$dtcmplot <- renderPlot({
+    fourfoldplot(confusionMatrix(ifelse(est()$dat$pred_dt >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$table)
+  })
+  
+  #### Random Forest summary
+  
+  output$rfsum <- renderText({
+    est()$fit_stats$fit_rf
+  })
+  
+  output$rfcmplot <- renderPlot({
+    fourfoldplot(confusionMatrix(ifelse(est()$dat$pred_rf >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$table)
+  })
+  
+  #### SVM summary
+  
+  output$svmsum <- renderText({
+    est()$fit_stats$fit_svm
+  })
+  
+  output$svmcmplot <- renderPlot({
+    fourfoldplot(confusionMatrix(ifelse(est()$dat$pred_svm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$table)
+  })
+
+  
+  #### ROC plots
+  
+  makeROCplot <- reactive({
+    dat <- est()$dat
+    glmROC <- roc(response = dat[,input$outvar], predictor = dat$pred_glm)
+    rfROC <- roc(response = dat[,input$outvar], predictor = dat$pred_rf)
+    dtROC <- roc(response = dat[,input$outvar], predictor = dat$pred_dt)
+    svmROC <- roc(response = dat[,input$outvar], predictor = dat$pred_svm)
+    list(glm = glmROC, rf = rfROC, dt = dtROC, svm = svmROC)
+  })
+  
+  output$roc <- renderPlotly({
+    ggplotly(ggroc(list(glm=makeROCplot()$glm, rf=makeROCplot()$rf, dt=makeROCplot()$dt, svm=makeROCplot()$svm)), aes = "linetype", color = "red")
     
-    dat <- redfilepls()
-    
-    
-    mod <- eval(
-      parse(
-        text =  get.textpls()
-      )
+  })
+  
+  #### Prediction Performance Table
+  #This previews the CSV data file
+  output$pred_perf <- renderDataTable({
+    validate(
+      need(est()$dat,
+           "Please insert a .csv file")
+    )
+    perf_tab <- cbind(
+      c(confusionMatrix(ifelse(est()$dat$pred_glm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$overall, confusionMatrix(ifelse(est()$dat$pred_glm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$byClass),
+      c(confusionMatrix(ifelse(est()$dat$pred_dt >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$overall, confusionMatrix(ifelse(est()$dat$pred_dt >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$byClass),
+      c(confusionMatrix(ifelse(est()$dat$pred_rf >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$overall, confusionMatrix(ifelse(est()$dat$pred_rf >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$byClass),
+      c(confusionMatrix(ifelse(est()$dat$pred_svm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$overall, confusionMatrix(ifelse(est()$dat$pred_svm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$byClass)
     )
     
-    mod
+    colnames(perf_tab) <- c("glm","dt","rf","svm")
     
+    datatable(perf_tab) %>%
+      formatRound(., columns = c(colnames(perf_tab)), digits = 2)
   })
   
-  # Again select Variables for PLS analysis 
-  # This allows user to select variables in the filedata
-  
-  
-  
-  
-  
-  
-  
-  # Make Plots
-  
-  makeplot <- function(){
-    if(input$anal != 'pls' & input$anal != 'efa'){
-      res <- est()$fit
-      semPaths(res, input$pltopt, style=input$pltstyl, layout = input$lay, edge.label.cex=.8, fade=F, gray=T)
-    } else if(input$anal == 'pls') {
-      res <- plsmod()
-      plot(plsmod())
-    } 
-  }
-  
-  makeplot2 <- function(){
-    if(input$anal == 'efa' & input$efalysisopt == 'pa'){
-      fa.parallel(x = redfileefa(), fa=input$pafaoption, fm = input$pafmoption)
-    }
-  }
-  # For Principale Component Analysis Plots
-  makeplot3 <- function(){
-    if(input$anal == 'efa' & input$efalysisopt == 'pca'){
-      autoplot(princomp(~., redfileefa()), colour = input$vars3)
-    }
-  }
-  makeplot4 <- function(){
-    if(input$anal == 'efa' & input$efalysisopt == 'pca'){
-      plot(princomp(~., redfileefa()), main = "Principal Component Variance Plot")
-    }
-  }
-  
-  output$plot <- renderPlot({
-    print(makeplot())
-  })
-  
-  output$plot2 <- renderPlot({
-    makeplot2()
-  })
-  output$plot3 <- renderPlot({
-    makeplot3()
-  })
-  output$plot4 <- renderPlot({
-    makeplot4()
-  })
-  
-  output$plsinner <- renderPlot({
-    print(plot(plsmod()))
-  })
-  output$plsouter <- renderPlot({
-    print(plot(plsmod(), what = "loadings", arr.width = 0.1))
-  })
-  
-  # Tabular Numbers
-  
-  ## Standardized Solutions
-  
-  output$stdsol <- renderFormattable({
-    formattable(standardizedsolution(est()$fit),  digits = 4)
-  })
-  
-  ## Overall Summary of Model
-  
-  result <- reactive({
-    if(input$anal == 'pls'){
-      res <- plsmod()
-      res <- summary(res)
-    } else {
-      res <- est()$fit
-      res <- summary(res, standardized=TRUE, fit.measures=TRUE)
-    } 
-    res
-  })
-  result1 <- reactive({
-    if(input$anal == 'sem' || input$anal == 'growth' || input$anal == 'cfa'){
-      res <- est()$fit
-      res <- summary(res, standardized=TRUE, fit.measures=TRUE)
-    }
-    res
-  })
-  
-  result2 <- reactive({
-    if(input$anal == 'efa'){
-      res <- est()
-    }
-    res
-  })
-  
-  resultpca <- reactive({
-    if(input$anal == 'efa' && input$efalysisopt == 'pca'){
-      res <- est()
-    }
-    res$fit$loadings
-  })
-  
-  output$result <- renderPrint({
-    result()
-  })
-  output$result1 <- renderPrint({
-    result1()
-  })
-  output$resultefa <- renderPrint({
-    result2()
-  })
-  output$resultefapca <- renderPrint({
-    resultpca()
-  })
-  
-  outputOptions(output, 'result', suspendWhenHidden=FALSE)
-  # Rsquared
-  
-  output$r2 <- renderPrint({
-    if(input$anal == 'pls'){
-      r2 <- plsmod()$inner_summary[, "R2", drop = FALSE]
-    } else {
-      r2 <- inspect(est()$fit, "rsquare")
-    }
-    r2
-  })
-  
-  # Fit measures
-  
-  output$fm <- renderPrint({
-    if(input$anal == 'pls'){
-      fm <- plsmod()$gof
-    } else {
-      fm <- fitmeasures(est()$fit)
-    }
-    fm
-  })
   
 })
