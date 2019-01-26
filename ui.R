@@ -54,8 +54,8 @@ dashboardPage(
                   h4(strong("Number 1:"),"User needs to have his/her own .csv file to input into the 'Data and Summary' Tab (Second tab on the left"),
                   h4(strong("Number 2:"),"User needs to have enough domain knowledge and information regarding the relationship between variables to set up the model equation in the 'Model Specification' Tab (Fourth tab on the left"),
                   h4(strong("Number 3:"),"In addition to the model specification, user needs to be familiar with the R syntax in setting up the equations for predictive modeling (i.e. logistic regression, decision tree, random forest, svm)"),
-                  h4(strong("Number 4:"),"The outputs that are generated in the 'Result' tab (Bottom tab on the left) needs the user to be comfortable with the 'dca' function output. (There is a link in the model specification to the dca() vignette)")
-                  
+                  h4(strong("Number 4:"),"The outputs that are generated in the 'Result' tab (Bottom tab on the left) needs the user to be comfortable with the 'dca' function output. (There is a link in the model specification to the dca() vignette)"),
+                  h4(strong("Number 5:"),"Those interested in the source code, the link to Github is ", a("here", href="https://github.com/ck2136/DecisionCurve", target="_blank"))
                   ,width = 13)
               )
               
@@ -195,22 +195,24 @@ dashboardPage(
               h2("Analysis Result"),
               fluidRow(
                 column(6,
-                       box(title = "GLM regression table", uiOutput("glm_sum"))
+                       box(title = "GLM regression table", uiOutput("glm_sum"),
+                           width = 12)
                 ),
                 column(6,
-                       box(title = "Decision Tree summary", plotOutput("dtplot"))
+                       box(title = "Decision Tree summary", plotOutput("dtplot"),
+                           width = 12)
                        )
                   ),
               fluidRow(
                 column(6,
                        box(title = "Random Forest summary", verbatimTextOutput("rfsum")
                            ,
-                           width = 4)
+                           width = 12)
                        ),
                 column(6,
                        box(title = "SVM summary", verbatimTextOutput("svmsum")
                            ,
-                           width = 4)
+                           width = 12)
                        ) 
                 )
       ),

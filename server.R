@@ -73,7 +73,7 @@ shinyServer(function(input, output) {
     
     validate(
       need(redfile(), "Sorry, there is no data for your requested summary table. 
-           Please inser the data."
+           Please insert the data."
       )
       )
     
@@ -137,8 +137,8 @@ shinyServer(function(input, output) {
     dat$pred_dt <- predict(fit_dt, dat)
     fit_stats$fit_dt <- fit_dt
     
-    fit_rf <- randomForest(as.formula(paste0(input$outvar, " ~ ", paste0(c(input$indvar), collapse = " + "))), data=dat, ntree = input$ntree, mtry = input$mtry)
-    dat$pred_rf <- predict(fit_rf, dat) # later will need to revise this section
+    fit_rf <- randomForest(as.formula(paste0("as.factor(",input$outvar,")", " ~ ", paste0(c(input$indvar), collapse = " + "))), data=dat, ntree = input$ntree, mtry = input$mtry)
+    dat$pred_rf <- predict(fit_rf, dat, type = "prob")[,2]# later will need to revise this section
     fit_stats$fit_rf <- fit_rf
     
     fit_svm <- svm(as.formula(paste0(input$outvar, " ~ ", paste0(c(input$indvar), collapse = " + "))),  data=dat, kernel = input$svmkernel, gamma = input$gamma)
@@ -164,7 +164,7 @@ shinyServer(function(input, output) {
   
   ## glm cm plot
   output$glmcmplot <- renderPlot({
-    fourfoldplot(confusionMatrix(ifelse(est()$dat$pred_glm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$table)
+    fourfoldplot(confusionMatrix(if_else(est()$dat$pred_glm >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$table)
   })
   
   ### Plotting 
@@ -176,27 +176,27 @@ shinyServer(function(input, output) {
   })
   
   output$dtcmplot <- renderPlot({
-    fourfoldplot(confusionMatrix(ifelse(est()$dat$pred_dt >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$table)
+    fourfoldplot(confusionMatrix(if_else(est()$dat$pred_dt >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$table)
   })
   
   #### Random Forest summary
   
-  output$rfsum <- renderText({
-    est()$fit_stats$fit_rf
+  output$rfsum <- renderPrint({
+    print(est()$fit_stats$fit_rf)
   })
   
   output$rfcmplot <- renderPlot({
-    fourfoldplot(confusionMatrix(ifelse(est()$dat$pred_rf >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$table)
+    fourfoldplot(confusionMatrix(if_else(est()$dat$pred_rf >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$table)
   })
   
   #### SVM summary
   
-  output$svmsum <- renderText({
-    est()$fit_stats$fit_svm
+  output$svmsum <- renderPrint({
+    print(est()$fit_stats$fit_svm)
   })
   
   output$svmcmplot <- renderPlot({
-    fourfoldplot(confusionMatrix(ifelse(est()$dat$pred_svm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$table)
+    fourfoldplot(confusionMatrix(if_else(est()$dat$pred_svm >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$table)
   })
 
   
@@ -224,10 +224,10 @@ shinyServer(function(input, output) {
            "Please insert a .csv file")
     )
     perf_tab <- cbind(
-      c(confusionMatrix(ifelse(est()$dat$pred_glm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$overall, confusionMatrix(ifelse(est()$dat$pred_glm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$byClass),
-      c(confusionMatrix(ifelse(est()$dat$pred_dt >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$overall, confusionMatrix(ifelse(est()$dat$pred_dt >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$byClass),
-      c(confusionMatrix(ifelse(est()$dat$pred_rf >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$overall, confusionMatrix(ifelse(est()$dat$pred_rf >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$byClass),
-      c(confusionMatrix(ifelse(est()$dat$pred_svm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$overall, confusionMatrix(ifelse(est()$dat$pred_svm >= input$prob_thresh, names(table(est()$dat[,input$outvar]))[1], names(table(est()$dat[,input$outvar]))[2]), est()$dat[,input$outvar])$byClass)
+      c(confusionMatrix(if_else(est()$dat$pred_glm >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$overall, confusionMatrix(if_else(est()$dat$pred_glm >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$byClass),
+      c(confusionMatrix(if_else(est()$dat$pred_dt >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$overall, confusionMatrix(if_else(est()$dat$pred_dt >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$byClass),
+      c(confusionMatrix(if_else(est()$dat$pred_rf >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$overall, confusionMatrix(if_else(est()$dat$pred_rf >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$byClass),
+      c(confusionMatrix(if_else(est()$dat$pred_svm >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$overall, confusionMatrix(if_else(est()$dat$pred_svm >= input$prob_thresh, as.factor(names(table(est()$dat[,input$outvar])))[1], as.factor(names(table(est()$dat[,input$outvar])))[2]), as.factor(est()$dat[,input$outvar]))$byClass)
     )
     
     colnames(perf_tab) <- c("glm","dt","rf","svm")
